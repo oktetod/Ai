@@ -1,15 +1,15 @@
 #!/bin/bash
 
-set -e  # Exit on any error
+set -e  # Keluar pada setiap kesalahan
 
-# Color codes for output
+# Kode warna untuk output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m' # Tanpa Warna
 
-# Logging functions
+# Fungsi logging
 log_info() {
     echo -e "${GREEN}[INFO]${NC} $1"
 }
@@ -28,7 +28,7 @@ log_debug() {
     fi
 }
 
-# Configuration
+# Konfigurasi
 APP_DIR="/app"
 MODELS_DIR="/app/models"
 LLAMA_DIR="/app/llama.cpp"
@@ -37,44 +37,44 @@ LOG_LEVEL="${LOG_LEVEL:-INFO}"
 PORT="${PORT:-7860}"
 HOST="${HOST:-0.0.0.0}"
 
-# Function to check if a command exists
+# Fungsi untuk memeriksa apakah perintah ada
 command_exists() {
     command -v "$1" >/dev/null 2>&1
 }
 
-# Function to check system requirements
+# Fungsi untuk memeriksa persyaratan sistem
 check_system_requirements() {
-    log_info "🔍 Checking system requirements..."
+    log_info "🔍 Memeriksa persyaratan sistem..."
     
-    # Check Python
+    # Periksa Python
     if ! command_exists python3; then
-        log_error "Python3 is not installed"
+        log_error "Python3 tidak terinstal"
         exit 1
     fi
     
     local python_version=$(python3 --version | cut -d' ' -f2)
-    log_info "Python version: $python_version"
+    log_info "Versi Python: $python_version"
     
-    # Check available memory
+    # Periksa memori yang tersedia
     if command_exists free; then
         local memory_mb=$(free -m | awk 'NR==2{printf "%.0f", $2}')
-        log_info "Available memory: ${memory_mb}MB"
+        log_info "Memori yang tersedia: ${memory_mb}MB"
         
         if [[ $memory_mb -lt 1024 ]]; then
-            log_warn "Low memory detected. Model performance may be affected."
+            log_warn "Memori rendah terdeteksi. Performa model mungkin terpengaruh."
         fi
     fi
     
-    # Check disk space
+    # Periksa ruang disk
     if command_exists df; then
         local disk_space=$(df -h $APP_DIR | awk 'NR==2 {print $4}')
-        log_info "Available disk space: $disk_space"
+        log_info "Ruang disk yang tersedia: $disk_space"
     fi
 }
 
-# Function to verify LLaMA installation
+# Fungsi untuk memverifikasi instalasi LLaMA
 verify_llama_installation() {
-    log_info "🔍 Verifying LLaMA installation..."
+    log_info "🔍 Memverifikasi instalasi LLaMA..."
     
     local llama_executables=(
         "/app/llama.cpp/build/bin/llama-cli"
@@ -86,23 +86,23 @@ verify_llama_installation() {
     local found_executable=false
     for executable in "${llama_executables[@]}"; do
         if [[ -x "$executable" ]]; then
-            log_info "✅ LLaMA executable found: $executable"
+            log_info "✅ Executable LLaMA ditemukan: $executable"
             found_executable=true
             break
         fi
     done
     
     if [[ "$found_executable" != "true" ]]; then
-        log_error "❌ No LLaMA executable found"
+        log_error "❌ Tidak ada executable LLaMA yang ditemukan"
         return 1
     fi
     
     return 0
 }
 
-# Function to verify model files
+# Fungsi untuk memverifikasi file model
 verify_model_files() {
-    log_info "🔍 Verifying model files..."
+    log_info "🔍 Memverifikasi file model..."
     
     local model_paths=(
         "/app/models/model.gguf"
@@ -113,23 +113,23 @@ verify_model_files() {
     for model_path in "${model_paths[@]}"; do
         if [[ -f "$model_path" ]]; then
             local file_size=$(du -h "$model_path" | cut -f1)
-            log_info "✅ Model file found: $model_path ($file_size)"
+            log_info "✅ File model ditemukan: $model_path ($file_size)"
             found_model=true
             break
         fi
     done
     
     if [[ "$found_model" != "true" ]]; then
-        log_warn "⚠️ No model files found. Attempting to download..."
+        log_warn "⚠️ Tidak ada file model yang ditemukan. Mencoba mengunduh..."
         download_model
     fi
     
     return 0
 }
 
-# Function to download model if missing
+# Fungsi untuk mengunduh model jika hilang
 download_model() {
-    log_info "📥 Downloading model file..."
+    log_info "📥 Mengunduh file model..."
     
     mkdir -p "$MODELS_DIR"
     
@@ -137,100 +137,101 @@ download_model() {
     local model_path="$MODELS_DIR/model.gguf"
     
     if command_exists wget; then
-        log_info "Using wget to download model..."
+        log_info "Menggunakan wget untuk mengunduh model..."
         if wget -O "$model_path" "$model_url" --progress=dot:giga --timeout=300 --tries=3; then
-            log_info "✅ Model downloaded successfully"
+            log_info "✅ Model berhasil diunduh"
         else
-            log_warn "⚠️ Model download failed with wget, trying curl..."
+            log_warn "⚠️ Unduhan model gagal dengan wget, mencoba curl..."
             download_with_curl "$model_url" "$model_path"
         fi
     elif command_exists curl; then
         download_with_curl "$model_url" "$model_path"
     else
-        log_error "Neither wget nor curl is available for downloading"
+        log_error "Baik wget maupun curl tidak tersedia untuk mengunduh"
         return 1
     fi
 }
 
-# Function to download with curl
+# Fungsi untuk mengunduh dengan curl
 download_with_curl() {
     local url="$1"
     local output="$2"
     
-    log_info "Using curl to download model..."
+    log_info "Menggunakan curl untuk mengunduh model..."
     if curl -L -o "$output" "$url" --connect-timeout 30 --max-time 1800 --retry 3; then
-        log_info "✅ Model downloaded successfully"
+        log_info "✅ Model berhasil diunduh"
     else
-        log_error "❌ Model download failed"
+        log_error "❌ Unduhan model gagal"
         return 1
     fi
 }
 
-# Function to check Python dependencies
+# Fungsi untuk memeriksa dependensi Python
 check_python_dependencies() {
-    log_info "🐍 Checking Python dependencies..."
+    log_info "🐍 Memeriksa dependensi Python..."
     
-    # Try to install from requirements.txt first
+    # Coba instal dari requirements.txt terlebih dahulu
     if [[ -f "requirements.txt" ]]; then
-        log_info "Installing Python dependencies from requirements.txt..."
+        log_info "Menginstal dependensi Python dari requirements.txt..."
         if pip3 install --no-cache-dir --upgrade -r requirements.txt; then
-            log_info "✅ Python dependencies from requirements.txt installed successfully"
+            log_info "✅ Dependensi Python dari requirements.txt berhasil diinstal"
         else
-            log_warn "⚠️ Some dependencies from requirements.txt failed, trying minimal requirements..."
+            log_warn "⚠️ Beberapa dependensi dari requirements.txt gagal, mencoba persyaratan minimal..."
             
-            # Fallback to minimal requirements
+            # Fallback ke persyaratan minimal yang diperbarui
             if [[ -f "requirements-minimal.txt" ]]; then
                 pip3 install --no-cache-dir --upgrade -r requirements-minimal.txt
-                log_info "✅ Minimal Python dependencies installed successfully"
+                log_info "✅ Dependensi Python minimal berhasil diinstal"
             else
-                # Install only essential packages
-                log_info "Installing essential dependencies manually..."
-                pip3 install --no-cache-dir Flask==2.3.3 Werkzeug==2.3.7
+                # Menginstal paket esensial secara manual, termasuk flask-limiter
+                log_info "Menginstal dependensi esensial secara manual..."
+                pip3 install --no-cache-dir Flask==2.3.3 Werkzeug==2.3.7 flask-limiter
             fi
         fi
     else
-        log_warn "⚠️ requirements.txt not found, installing essential dependencies..."
-        pip3 install --no-cache-dir Flask==2.3.3 Werkzeug==2.3.7
+        log_warn "⚠️ requirements.txt tidak ditemukan, menginstal dependensi esensial..."
+        # Menginstal paket esensial secara manual, termasuk flask-limiter
+        pip3 install --no-cache-dir Flask==2.3.3 Werkzeug==2.3.7 flask-limiter
     fi
     
-    # Verify critical dependencies
+    # Verifikasi dependensi kritis
     local critical_deps=("flask" "flask-limiter")
     for dep in "${critical_deps[@]}"; do
         if python3 -c "import $dep" 2>/dev/null; then
-            log_debug "✅ $dep is available"
+            log_debug "✅ $dep tersedia"
         else
-            log_error "❌ Critical dependency $dep is not available"
+            log_error "❌ Dependensi kritis $dep tidak tersedia"
             return 1
         fi
     done
 }
 
-# Function to set up environment
+# Fungsi untuk menyiapkan lingkungan
 setup_environment() {
-    log_info "🔧 Setting up environment..."
+    log_info "🔧 Menyiapkan lingkungan..."
     
-    # Set environment variables
+    # Set variabel lingkungan
     export PYTHONUNBUFFERED=1
     export PYTHONPATH="$APP_DIR"
     export PORT="$PORT"
     export HOST="$HOST"
     export LOG_LEVEL="$LOG_LEVEL"
     
-    # Create necessary directories
+    # Buat direktori yang diperlukan
     mkdir -p "$MODELS_DIR"
     mkdir -p "/tmp/llama_cache"
     
-    # Set permissions
+    # Set izin
     chmod -R 755 "$APP_DIR" 2>/dev/null || true
     
-    log_info "Environment setup completed"
+    log_info "Penyiapan lingkungan selesai"
 }
 
-# Function to perform health check
+# Fungsi untuk melakukan pemeriksaan kesehatan
 health_check() {
-    log_info "🏥 Performing initial health check..."
+    log_info "🏥 Melakukan pemeriksaan kesehatan awal..."
     
-    # Wait a moment for the server to start
+    # Tunggu sebentar agar server mulai
     sleep 3
     
     local max_attempts=10
@@ -239,92 +240,92 @@ health_check() {
     while [[ $attempt -le $max_attempts ]]; do
         if command_exists curl; then
             if curl -s -f "http://localhost:$PORT/health" >/dev/null 2>&1; then
-                log_info "✅ Health check passed"
+                log_info "✅ Pemeriksaan kesehatan berhasil"
                 return 0
             fi
         elif command_exists wget; then
             if wget -q --spider "http://localhost:$PORT/health" 2>/dev/null; then
-                log_info "✅ Health check passed"
+                log_info "✅ Pemeriksaan kesehatan berhasil"
                 return 0
             fi
         fi
         
-        log_debug "Health check attempt $attempt/$max_attempts failed, retrying..."
+        log_debug "Percobaan pemeriksaan kesehatan $attempt/$max_attempts gagal, mencoba lagi..."
         sleep 2
         ((attempt++))
     done
     
-    log_warn "⚠️ Health check failed after $max_attempts attempts"
+    log_warn "⚠️ Pemeriksaan kesehatan gagal setelah $max_attempts percobaan"
     return 1
 }
 
-# Function to start the application
+# Fungsi untuk memulai aplikasi
 start_application() {
-    log_info "🚀 Starting LLaMA API server..."
+    log_info "🚀 Memulai server API LLaMA..."
     log_info "Host: $HOST"
     log_info "Port: $PORT"
-    log_info "Log Level: $LOG_LEVEL"
+    log_info "Tingkat Log: $LOG_LEVEL"
     log_info "Debug: ${DEBUG:-false}"
     
-    # Start the application in background for health check
+    # Mulai aplikasi di latar belakang untuk pemeriksaan kesehatan
     python3 "$PYTHON_APP" &
     local app_pid=$!
     
-    # Perform health check
+    # Lakukan pemeriksaan kesehatan
     if health_check; then
-        log_info "🎉 Application started successfully!"
-        log_info "API Documentation available at: http://$HOST:$PORT/"
+        log_info "🎉 Aplikasi berhasil dimulai!"
+        log_info "Dokumentasi API tersedia di: http://$HOST:$PORT/"
         
-        # Kill background process and start normally
+        # Matikan proses latar belakang dan mulai secara normal
         kill $app_pid 2>/dev/null || true
         wait $app_pid 2>/dev/null || true
         
-        # Start the application normally
+        # Mulai aplikasi secara normal
         exec python3 "$PYTHON_APP"
     else
-        log_error "❌ Application failed to start properly"
+        log_error "❌ Aplikasi gagal dimulai dengan benar"
         kill $app_pid 2>/dev/null || true
         exit 1
     fi
 }
 
-# Function to clean up on exit
+# Fungsi untuk membersihkan saat keluar
 cleanup() {
-    log_info "🔄 Cleaning up..."
-    # Kill any remaining Python processes
+    log_info "🔄 Membersihkan..."
+    # Matikan setiap proses Python yang tersisa
     pkill -f "python3.*app.py" 2>/dev/null || true
 }
 
-# Set up trap for cleanup
+# Siapkan trap untuk pembersihan
 trap cleanup EXIT INT TERM
 
-# Main execution
+# Eksekusi utama
 main() {
-    log_info "🎯 Starting LLaMA API Server Setup"
+    log_info "🎯 Memulai Penyiapan Server API LLaMA"
     log_info "=================================="
     
-    # Change to app directory
+    # Pindah ke direktori aplikasi
     cd "$APP_DIR" || {
-        log_error "Failed to change to app directory: $APP_DIR"
+        log_error "Gagal berpindah ke direktori aplikasi: $APP_DIR"
         exit 1
     }
     
-    # Run setup steps
+    # Jalankan langkah-langkah penyiapan
     check_system_requirements
     setup_environment
     verify_llama_installation || {
-        log_error "LLaMA installation verification failed"
+        log_error "Verifikasi instalasi LLaMA gagal"
         exit 1
     }
     verify_model_files
     check_python_dependencies || {
-        log_error "Python dependencies check failed"
+        log_error "Pemeriksaan dependensi Python gagal"
         exit 1
     }
     
-    # Start the application
+    # Mulai aplikasi
     start_application
 }
 
-# Run main function
+# Jalankan fungsi main
 main "$@"
