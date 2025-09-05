@@ -1,64 +1,321 @@
-echo "🚀 GGUF Model Setup and Debug Script"
-echo "======================================"
+#!/bin/bash
 
-# Cek lokasi saat ini
-echo "📁 Current directory: $(pwd)"
-echo "📁 Contents:"
-ls -la
+set -e  # Exit on any error
 
-# Cek apakah llama.cpp sudah di-clone
-if [ -d "/app/llama.cpp" ]; then
-    echo "✅ llama.cpp directory found"
-    echo "📁 llama.cpp contents:"
-    ls -la /app/llama.cpp/
-    
-    # Cek build artifacts
-    echo "🔍 Looking for executables..."
-    find /app/llama.cpp -name "*main*" -o -name "*llama*" | head -10
-    
-    # Cek jika ada executable
-    if [ -f "/app/llama.cpp/llama-cli" ]; then
-        echo "✅ Found llama-cli"
-        ls -la /app/llama.cpp/llama-cli
-    elif [ -f "/app/llama.cpp/main" ]; then
-        echo "✅ Found main"
-        ls -la /app/llama.cpp/main
-    else
-        echo "❌ No executable found, attempting build..."
-        cd /app/llama.cpp
-        make clean
-        make -j$(nproc)
-        echo "🏗️ Build completed, checking results..."
-        ls -la
+# Color codes for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
+
+# Logging functions
+log_info() {
+    echo -e "${GREEN}[INFO]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+log_debug() {
+    if [[ "${DEBUG:-false}" == "true" ]]; then
+        echo -e "${BLUE}[DEBUG]${NC} $1"
     fi
-else
-    echo "❌ llama.cpp directory not found, cloning..."
-    git clone https://github.com/ggerganov/llama.cpp.git
-    cd llama.cpp
-    make -j$(nproc)
-fi
+}
 
-# Cek model files
-echo "🧠 Looking for GGUF models..."
-find /app -name "*.gguf" 2>/dev/null | head -10
+# Configuration
+APP_DIR="/app"
+MODELS_DIR="/app/models"
+LLAMA_DIR="/app/llama.cpp"
+PYTHON_APP="app.py"
+LOG_LEVEL="${LOG_LEVEL:-INFO}"
+PORT="${PORT:-7860}"
+HOST="${HOST:-0.0.0.0}"
 
-# Cek memory dan disk space
-echo "💾 System resources:"
-df -h /app
-# free -h  # Might not work in container
+# Function to check if a command exists
+command_exists() {
+    command -v "$1" >/dev/null 2>&1
+}
 
-# Test basic functionality
-echo "🧪 Testing basic functionality..."
-cd /app
+# Function to check system requirements
+check_system_requirements() {
+    log_info "🔍 Checking system requirements..."
+    
+    # Check Python
+    if ! command_exists python3; then
+        log_error "Python3 is not installed"
+        exit 1
+    fi
+    
+    local python_version=$(python3 --version | cut -d' ' -f2)
+    log_info "Python version: $python_version"
+    
+    # Check available memory
+    if command_exists free; then
+        local memory_mb=$(free -m | awk 'NR==2{printf "%.0f", $2}')
+        log_info "Available memory: ${memory_mb}MB"
+        
+        if [[ $memory_mb -lt 1024 ]]; then
+            log_warn "Low memory detected. Model performance may be affected."
+        fi
+    fi
+    
+    # Check disk space
+    if command_exists df; then
+        local disk_space=$(df -h $APP_DIR | awk 'NR==2 {print $4}')
+        log_info "Available disk space: $disk_space"
+    fi
+}
 
-if [ -f "app.py" ]; then
-    echo "✅ app.py found"
-    python -c "import flask; print('✅ Flask installed')"
-else
-    echo "❌ app.py not found"
-fi
+# Function to verify LLaMA installation
+verify_llama_installation() {
+    log_info "🔍 Verifying LLaMA installation..."
+    
+    local llama_executables=(
+        "/app/llama.cpp/build/bin/llama-cli"
+        "/app/llama.cpp/build/bin/main"
+        "/app/llama.cpp/llama-cli"
+        "/app/llama.cpp/main"
+    )
+    
+    local found_executable=false
+    for executable in "${llama_executables[@]}"; do
+        if [[ -x "$executable" ]]; then
+            log_info "✅ LLaMA executable found: $executable"
+            found_executable=true
+            break
+        fi
+    done
+    
+    if [[ "$found_executable" != "true" ]]; then
+        log_error "❌ No LLaMA executable found"
+        return 1
+    fi
+    
+    return 0
+}
 
-echo "======================================"
-echo "✨ Setup check completed!"
-echo "Start the application with: python app.py"
+# Function to verify model files
+verify_model_files() {
+    log_info "🔍 Verifying model files..."
+    
+    local model_paths=(
+        "/app/models/model.gguf"
+        "/app/models/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+    )
+    
+    local found_model=false
+    for model_path in "${model_paths[@]}"; do
+        if [[ -f "$model_path" ]]; then
+            local file_size=$(du -h "$model_path" | cut -f1)
+            log_info "✅ Model file found: $model_path ($file_size)"
+            found_model=true
+            break
+        fi
+    done
+    
+    if [[ "$found_model" != "true" ]]; then
+        log_warn "⚠️ No model files found. Attempting to download..."
+        download_model
+    fi
+    
+    return 0
+}
 
+# Function to download model if missing
+download_model() {
+    log_info "📥 Downloading model file..."
+    
+    mkdir -p "$MODELS_DIR"
+    
+    local model_url="https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
+    local model_path="$MODELS_DIR/model.gguf"
+    
+    if command_exists wget; then
+        log_info "Using wget to download model..."
+        if wget -O "$model_path" "$model_url" --progress=dot:giga --timeout=300 --tries=3; then
+            log_info "✅ Model downloaded successfully"
+        else
+            log_warn "⚠️ Model download failed with wget, trying curl..."
+            download_with_curl "$model_url" "$model_path"
+        fi
+    elif command_exists curl; then
+        download_with_curl "$model_url" "$model_path"
+    else
+        log_error "Neither wget nor curl is available for downloading"
+        return 1
+    fi
+}
+
+# Function to download with curl
+download_with_curl() {
+    local url="$1"
+    local output="$2"
+    
+    log_info "Using curl to download model..."
+    if curl -L -o "$output" "$url" --connect-timeout 30 --max-time 1800 --retry 3; then
+        log_info "✅ Model downloaded successfully"
+    else
+        log_error "❌ Model download failed"
+        return 1
+    fi
+}
+
+# Function to check Python dependencies
+check_python_dependencies() {
+    log_info "🐍 Checking Python dependencies..."
+    
+    if [[ -f "requirements.txt" ]]; then
+        log_info "Installing/updating Python dependencies..."
+        pip3 install --no-cache-dir --upgrade -r requirements.txt
+        
+        if [[ $? -eq 0 ]]; then
+            log_info "✅ Python dependencies installed successfully"
+        else
+            log_error "❌ Failed to install Python dependencies"
+            return 1
+        fi
+    else
+        log_warn "⚠️ requirements.txt not found"
+    fi
+    
+    # Verify critical dependencies
+    local critical_deps=("flask" "flask-limiter")
+    for dep in "${critical_deps[@]}"; do
+        if python3 -c "import $dep" 2>/dev/null; then
+            log_debug "✅ $dep is available"
+        else
+            log_error "❌ Critical dependency $dep is not available"
+            return 1
+        fi
+    done
+}
+
+# Function to set up environment
+setup_environment() {
+    log_info "🔧 Setting up environment..."
+    
+    # Set environment variables
+    export PYTHONUNBUFFERED=1
+    export PYTHONPATH="$APP_DIR"
+    export PORT="$PORT"
+    export HOST="$HOST"
+    export LOG_LEVEL="$LOG_LEVEL"
+    
+    # Create necessary directories
+    mkdir -p "$MODELS_DIR"
+    mkdir -p "/tmp/llama_cache"
+    
+    # Set permissions
+    chmod -R 755 "$APP_DIR" 2>/dev/null || true
+    
+    log_info "Environment setup completed"
+}
+
+# Function to perform health check
+health_check() {
+    log_info "🏥 Performing initial health check..."
+    
+    # Wait a moment for the server to start
+    sleep 3
+    
+    local max_attempts=10
+    local attempt=1
+    
+    while [[ $attempt -le $max_attempts ]]; do
+        if command_exists curl; then
+            if curl -s -f "http://localhost:$PORT/health" >/dev/null 2>&1; then
+                log_info "✅ Health check passed"
+                return 0
+            fi
+        elif command_exists wget; then
+            if wget -q --spider "http://localhost:$PORT/health" 2>/dev/null; then
+                log_info "✅ Health check passed"
+                return 0
+            fi
+        fi
+        
+        log_debug "Health check attempt $attempt/$max_attempts failed, retrying..."
+        sleep 2
+        ((attempt++))
+    done
+    
+    log_warn "⚠️ Health check failed after $max_attempts attempts"
+    return 1
+}
+
+# Function to start the application
+start_application() {
+    log_info "🚀 Starting LLaMA API server..."
+    log_info "Host: $HOST"
+    log_info "Port: $PORT"
+    log_info "Log Level: $LOG_LEVEL"
+    log_info "Debug: ${DEBUG:-false}"
+    
+    # Start the application in background for health check
+    python3 "$PYTHON_APP" &
+    local app_pid=$!
+    
+    # Perform health check
+    if health_check; then
+        log_info "🎉 Application started successfully!"
+        log_info "API Documentation available at: http://$HOST:$PORT/"
+        
+        # Kill background process and start normally
+        kill $app_pid 2>/dev/null || true
+        wait $app_pid 2>/dev/null || true
+        
+        # Start the application normally
+        exec python3 "$PYTHON_APP"
+    else
+        log_error "❌ Application failed to start properly"
+        kill $app_pid 2>/dev/null || true
+        exit 1
+    fi
+}
+
+# Function to clean up on exit
+cleanup() {
+    log_info "🔄 Cleaning up..."
+    # Kill any remaining Python processes
+    pkill -f "python3.*app.py" 2>/dev/null || true
+}
+
+# Set up trap for cleanup
+trap cleanup EXIT INT TERM
+
+# Main execution
+main() {
+    log_info "🎯 Starting LLaMA API Server Setup"
+    log_info "=================================="
+    
+    # Change to app directory
+    cd "$APP_DIR" || {
+        log_error "Failed to change to app directory: $APP_DIR"
+        exit 1
+    }
+    
+    # Run setup steps
+    check_system_requirements
+    setup_environment
+    verify_llama_installation || {
+        log_error "LLaMA installation verification failed"
+        exit 1
+    }
+    verify_model_files
+    check_python_dependencies || {
+        log_error "Python dependencies check failed"
+        exit 1
+    }
+    
+    # Start the application
+    start_application
+}
+
+# Run main function
+main "$@"
