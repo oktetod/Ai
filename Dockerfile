@@ -26,22 +26,20 @@ RUN apt-get update && apt-get install -y \
 # Set working directory utama
 WORKDIR /app
 
-# Mengkloning llama.cpp
+# Mengkloning llama.cpp dan membangunnya
 RUN git clone https://github.com/ggerganov/llama.cpp.git
-
-# Membangun llama.cpp dengan CMake
 WORKDIR /app/llama.cpp
-RUN mkdir -p build && cd build && \
-    cmake .. -DLLAMA_OPENBLAS=ON && \
-    cmake --build . --config Release --parallel $(nproc)
 
-# --- START OF FIX ---
-# Menyalin executable yang sudah di-build ke direktori aplikasi utama
-RUN cp /app/llama.cpp/build/bin/server /app/
-# --- END OF FIX ---
+# Membangun llama.cpp dengan CMake, memastikan server dibangun
+RUN mkdir -p build && cd build && \
+    cmake .. -DLLAMA_OPENBLAS=ON -DLLAMA_BUILD_EXAMPLES=ON && \
+    cmake --build . --config Release --parallel $(nproc)
 
 # Kembali ke direktori aplikasi utama
 WORKDIR /app
+
+# Menyalin server llama.cpp yang telah dibangun
+RUN cp /app/llama.cpp/build/bin/server /app/
 
 # Membuat direktori models
 RUN mkdir -p /app/models
@@ -65,15 +63,6 @@ RUN chmod +x setup.sh
 
 # Menetapkan variabel lingkungan
 ENV PYTHONUNBUFFERED=1
-ENV PORT=7860
-ENV PYTHONPATH=/app
 
-# Mengekspos port
-EXPOSE 7860
-
-# Menambahkan healthcheck untuk memeriksa status aplikasi
-HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
-
-# Menjalankan skrip setup sebagai titik masuk utama
-CMD ["./setup.sh"]
+# Menjalankan server
+ENTRYPOINT ["/bin/bash", "setup.sh"]
