@@ -1,11 +1,11 @@
-# Menggunakan image dasar Ubuntu yang stabil
+# Use a modern, stable base image
 FROM ubuntu:22.04
 
-# Mencegah prompt interaktif selama instalasi paket
+# Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
-# Menginstal dependensi sistem yang diperlukan
-RUN apt-get update && apt-get install -y \
+# Install system dependencies for Python, Flask, and llama.cpp
+RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-venv \
@@ -19,56 +19,39 @@ RUN apt-get update && apt-get install -y \
     make \
     pkg-config \
     libopenblas-dev \
-    libcurl4-openssl-dev \
     git-lfs \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -s /usr/bin/python3 /usr/bin/python \
+    && ln -s /usr/bin/pip3 /usr/bin/pip
 
-# Set working directory utama
+# Set working directory for the application
 WORKDIR /app
 
-# Mengkloning llama.cpp dan membangunnya
+# Clone llama.cpp and build it with OpenBLAS for performance
 RUN git clone https://github.com/ggerganov/llama.cpp.git
 WORKDIR /app/llama.cpp
+RUN make clean && LLAMA_OPENBLAS=1 make -j$(nproc)
 
-# Membangun llama.cpp dengan CMake
-RUN mkdir -p build && cd build && \
-    cmake .. -DLLAMA_OPENBLAS=ON && \
-    cmake --build . --config Release --parallel $(nproc)
-
-# Kembali ke direktori aplikasi utama
+# Download a small, reliable GGUF model to the designated models directory
 WORKDIR /app
-
-# Membuat direktori models
 RUN mkdir -p /app/models
+RUN wget -O models/model.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf"
 
-# Mengunduh model GGUF
-RUN wget -O models/model.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Chat-v1.0-GGUF/resolve/main/tinyllama-1.1b-chat-v1.0.Q4_K_M.gguf" || \
-    wget -O models/model.gguf "https://huggingface.co/microsoft/DialoGPT-small/resolve/main/pytorch_model.bin" || \
-    echo "Model download failed - will use local model if available"
-
-# Menyalin file aplikasi
+# Copy the application files
 COPY requirements.txt .
 COPY app.py .
 COPY setup.sh .
-
-# Menginstal dependensi Python
-RUN pip install --no-cache-dir --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
-
-# Memberi izin eksekusi pada skrip setup
 RUN chmod +x setup.sh
 
-# Menetapkan variabel lingkungan
-ENV PYTHONUNBUFFERED=1
-ENV PORT=7860
-ENV PYTHONPATH=/app
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
 
-# Mengekspos port
+# Expose the port used by the Flask app
 EXPOSE 7860
 
-# Menambahkan healthcheck untuk memeriksa status aplikasi
+# Define a healthcheck to ensure the container is ready
 HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
     CMD curl -f http://localhost:7860/health || exit 1
 
-# Menjalankan skrip setup sebagai titik masuk utama
+# Define the entrypoint to run the setup script, which then starts the app
 CMD ["./setup.sh"]
