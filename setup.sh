@@ -170,18 +170,27 @@ download_with_curl() {
 check_python_dependencies() {
     log_info "🐍 Checking Python dependencies..."
     
+    # Try to install from requirements.txt first
     if [[ -f "requirements.txt" ]]; then
-        log_info "Installing/updating Python dependencies..."
-        pip3 install --no-cache-dir --upgrade -r requirements.txt
-        
-        if [[ $? -eq 0 ]]; then
-            log_info "✅ Python dependencies installed successfully"
+        log_info "Installing Python dependencies from requirements.txt..."
+        if pip3 install --no-cache-dir --upgrade -r requirements.txt; then
+            log_info "✅ Python dependencies from requirements.txt installed successfully"
         else
-            log_error "❌ Failed to install Python dependencies"
-            return 1
+            log_warn "⚠️ Some dependencies from requirements.txt failed, trying minimal requirements..."
+            
+            # Fallback to minimal requirements
+            if [[ -f "requirements-minimal.txt" ]]; then
+                pip3 install --no-cache-dir --upgrade -r requirements-minimal.txt
+                log_info "✅ Minimal Python dependencies installed successfully"
+            else
+                # Install only essential packages
+                log_info "Installing essential dependencies manually..."
+                pip3 install --no-cache-dir Flask==2.3.3 Werkzeug==2.3.7
+            fi
         fi
     else
-        log_warn "⚠️ requirements.txt not found"
+        log_warn "⚠️ requirements.txt not found, installing essential dependencies..."
+        pip3 install --no-cache-dir Flask==2.3.3 Werkzeug==2.3.7
     fi
     
     # Verify critical dependencies
