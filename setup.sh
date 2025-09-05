@@ -195,7 +195,7 @@ check_python_dependencies() {
     fi
     
     # Verifikasi dependensi kritis
-    local critical_deps=("flask" "flask-limiter")
+    local critical_deps=("flask" "flask_limiter")
     for dep in "${critical_deps[@]}"; do
         if python3 -c "import $dep" 2>/dev/null; then
             log_debug "✅ $dep tersedia"
