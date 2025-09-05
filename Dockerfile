@@ -4,8 +4,11 @@ FROM ubuntu:22.04
 # Prevent interactive prompts during package installation
 ENV DEBIAN_FRONTEND=noninteractive
 
+# Update package lists
+RUN apt-get update
+
 # Install system dependencies for Python, Flask, and llama.cpp
-RUN apt-get update && apt-get install -y --no-install-recommends \
+RUN apt-get install -y --no-install-recommends \
     python3 \
     python3-pip \
     python3-venv \
@@ -20,9 +23,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     pkg-config \
     libopenblas-dev \
     git-lfs \
-    && rm -rf /var/lib/apt/lists/* \
-    && ln -s /usr/bin/python3 /usr/bin/python \
-    && ln -s /usr/bin/pip3 /usr/bin/pip
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory for the application
 WORKDIR /app
