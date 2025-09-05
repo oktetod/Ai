@@ -243,11 +243,19 @@ def home():
         "name": "LLaMA Text Generation API",
         "version": "1.0.0",
         "status": "online" if model_manager.is_initialized else "model_not_ready",
+        "features": {
+            "rate_limiting": "enabled" if (limiter or simple_limiter) else "disabled",
+            "rate_limiter_type": "flask-limiter" if limiter else "simple" if simple_limiter else "none"
+        },
         "endpoints": {
             "/": "API information",
             "/health": "Health check",
             "/generate": "Text generation (POST)",
             "/model/info": "Model information"
+        },
+        "rate_limits": {
+            "generate_endpoint": "10 requests per minute per IP",
+            "global_limits": "100 requests per hour, 20 per minute" if limiter else "10 per minute per IP"
         },
         "documentation": {
             "generate_endpoint": {
