@@ -26,14 +26,19 @@ RUN apt-get update && apt-get install -y \
 # Set working directory utama
 WORKDIR /app
 
-# Mengkloning llama.cpp dan membangunnya
+# Mengkloning llama.cpp
 RUN git clone https://github.com/ggerganov/llama.cpp.git
-WORKDIR /app/llama.cpp
 
 # Membangun llama.cpp dengan CMake
+WORKDIR /app/llama.cpp
 RUN mkdir -p build && cd build && \
     cmake .. -DLLAMA_OPENBLAS=ON && \
     cmake --build . --config Release --parallel $(nproc)
+
+# --- START OF FIX ---
+# Menyalin executable yang sudah di-build ke direktori aplikasi utama
+RUN cp /app/llama.cpp/build/bin/server /app/
+# --- END OF FIX ---
 
 # Kembali ke direktori aplikasi utama
 WORKDIR /app
