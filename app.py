@@ -27,7 +27,7 @@ app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1, x_host=1)
 
 # Rate limiting
 limiter = Limiter(
-    app,
+    app=app,
     key_func=get_remote_address,
     default_limits=["100 per hour", "20 per minute"]
 )
@@ -244,8 +244,8 @@ def home():
         "version": "1.0.0",
         "status": "online" if model_manager.is_initialized else "model_not_ready",
         "features": {
-            "rate_limiting": "enabled" if (limiter or simple_limiter) else "disabled",
-            "rate_limiter_type": "flask-limiter" if limiter else "simple" if simple_limiter else "none"
+            "rate_limiting": "enabled" if (limiter or 'simple_limiter' in locals()) else "disabled",
+            "rate_limiter_type": "flask-limiter" if limiter else "simple" if 'simple_limiter' in locals() else "none"
         },
         "endpoints": {
             "/": "API information",
@@ -324,7 +324,7 @@ def generate_text():
     """Generate text using LLaMA model."""
     if not model_manager.is_initialized:
         return jsonify({
-            "success": false,
+            "success": False,
             "error": "Model not initialized. Please check server health."
         }), 503
     
@@ -333,7 +333,7 @@ def generate_text():
         
         if not data or "prompt" not in data:
             return jsonify({
-                "success": false,
+                "success": False,
                 "error": "Missing required field: prompt"
             }), 400
         
@@ -348,7 +348,7 @@ def generate_text():
         
         if not gen_request.prompt:
             return jsonify({
-                "success": false,
+                "success": False,
                 "error": "Prompt cannot be empty"
             }), 400
         
@@ -379,13 +379,13 @@ def generate_text():
         
     except ValueError as e:
         return jsonify({
-            "success": false,
+            "success": False,
             "error": f"Invalid parameter value: {str(e)}"
         }), 400
     except Exception as e:
         logger.error(f"❌ Error in generate endpoint: {e}")
         return jsonify({
-            "success": false,
+            "success": False,
             "error": "Internal server error"
         }), 500
 
@@ -413,4 +413,4 @@ if __name__ == "__main__":
         port=port,
         debug=debug_mode,
         threaded=True
-    )
+        )
