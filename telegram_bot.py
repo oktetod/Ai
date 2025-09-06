@@ -30,25 +30,10 @@ WEBHOOK_URL_PATH = "/telegram"
 # Inisialisasi aplikasi Flask
 app = Flask(__name__)
 
-# Global Application instance.
-application = None
-
-
-def setup_telegram_bot():
-    """Menginisialisasi bot Telegram dan menambahkan handler."""
-    global application
-    if application is None:
-        application = (
-            Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-        )
-
-        application.add_handler(CommandHandler("start", start_command))
-        application.add_handler(CommandHandler("help", help_command))
-        application.add_handler(
-            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
-        )
-    return application
-
+# Inisialisasi Application builder untuk python-telegram-bot
+application = (
+    Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+)
 
 # Fungsi handler untuk perintah /start
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -118,15 +103,20 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             chat_id=chat_id, message_id=processing_message.message_id
         )
 
+# Tambahkan handler bot
+application.add_handler(CommandHandler("start", start_command))
+application.add_handler(CommandHandler("help", help_command))
+application.add_handler(
+    MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+)
+
+# Inisialisasi `application` saat aplikasi Flask dimulai
+@app.before_first_request
+async def initialize_application():
+    await application.initialize()
 
 @app.route(WEBHOOK_URL_PATH, methods=["POST"])
 async def telegram_webhook():
-    global application
-    if application is None:
-        application = setup_telegram_bot()
-    if not application.post_init:
-        await application.post_init.run_once()
-
     update = Update.de_json(request.get_json(force=True), application.bot)
     await application.process_update(update)
     return jsonify({"status": "success"})
@@ -134,9 +124,6 @@ async def telegram_webhook():
 
 @app.route("/", methods=["GET"])
 async def index():
-    global application
-    if application is None:
-        application = setup_telegram_bot()
     return jsonify({"status": "Telegram bot is running"})
 
 
