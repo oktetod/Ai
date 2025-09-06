@@ -13,7 +13,6 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # URL API LLaMA.
-# Perhatikan: Kami menggunakan 'http://127.0.0.1:7860' karena keduanya berada di kontainer yang sama
 LLAMA_API_URL = "http://127.0.0.1:7860/generate"
 
 # Token Bot Telegram dari variabel lingkungan
@@ -107,8 +106,13 @@ async def telegram_webhook():
         return jsonify({"status": "success"})
 
 @app.route("/", methods=["GET"])
-def index():
+async def index():
+    # Inisialisasi aplikasi saat permintaan diterima untuk pertama kalinya
+    await application.initialize()
     return jsonify({"status": "Telegram bot is running"})
 
 if __name__ == "__main__":
+    # Gunicorn akan menjalankan aplikasi Flask, bukan ini.
+    # Namun, tambahkan inisialisasi di sini jika Anda ingin menjalankannya secara lokal.
+    # application.initialize()
     app.run(host="0.0.0.0", port=8080)
