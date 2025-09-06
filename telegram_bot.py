@@ -105,14 +105,14 @@ async def telegram_webhook():
         await application.process_update(update)
         return jsonify({"status": "success"})
 
+# Tambahkan baris ini untuk inisialisasi
+@app.before_request
+async def before_request():
+    await application.initialize()
+
 @app.route("/", methods=["GET"])
 async def index():
-    # Inisialisasi aplikasi saat permintaan diterima untuk pertama kalinya
-    await application.initialize()
     return jsonify({"status": "Telegram bot is running"})
 
 if __name__ == "__main__":
-    # Gunicorn akan menjalankan aplikasi Flask, bukan ini.
-    # Namun, tambahkan inisialisasi di sini jika Anda ingin menjalankannya secara lokal.
-    # application.initialize()
     app.run(host="0.0.0.0", port=8080)
