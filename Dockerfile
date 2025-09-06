@@ -50,25 +50,23 @@ RUN wget -O models/model.gguf "https://huggingface.co/TheBloke/TinyLlama-1.1B-Ch
 COPY requirements.txt .
 COPY app.py .
 COPY setup.sh .
+COPY telegram_bot.py .
+COPY run.sh .
 
 # Menginstal dependensi Python
 RUN pip install --no-cache-dir --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Memberi izin eksekusi pada skrip setup
-RUN chmod +x setup.sh
+# Memberi izin eksekusi pada skrip
+RUN chmod +x setup.sh run.sh
 
 # Menetapkan variabel lingkungan
 ENV PYTHONUNBUFFERED=1
-ENV PORT=7860
+ENV PORT=8080
 ENV PYTHONPATH=/app
 
-# Mengekspos port
-EXPOSE 7860
+# Mengekspos port 8080 untuk webhook
+EXPOSE 8080
 
-# Menambahkan healthcheck untuk memeriksa status aplikasi
-HEALTHCHECK --interval=30s --timeout=30s --start-period=60s --retries=3 \
-    CMD curl -f http://localhost:7860/health || exit 1
-
-# Menjalankan skrip setup sebagai titik masuk utama
-CMD ["./setup.sh"]
+# Menjalankan skrip run sebagai titik masuk utama
+CMD ["./run.sh"]
