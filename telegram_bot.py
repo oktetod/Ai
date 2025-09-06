@@ -3,12 +3,18 @@ import logging
 import httpx
 from flask import Flask, request, jsonify
 from telegram import Update
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, ContextTypes
+from telegram.ext import (
+    Application,
+    CommandHandler,
+    MessageHandler,
+    filters,
+    ContextTypes,
+)
 
 # Konfigurasi logging
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
@@ -24,13 +30,39 @@ WEBHOOK_URL_PATH = "/telegram"
 # Inisialisasi aplikasi Flask
 app = Flask(__name__)
 
+# Global Application instance.
+application = None
+
+
+def setup_telegram_bot():
+    """Menginisialisasi bot Telegram dan menambahkan handler."""
+    global application
+    if application is None:
+        application = (
+            Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+        )
+
+        application.add_handler(CommandHandler("start", start_command))
+        application.add_handler(CommandHandler("help", help_command))
+        application.add_handler(
+            MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
+        )
+    return application
+
+
 # Fungsi handler untuk perintah /start
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Halo! Saya adalah bot LLaMA. Kirimkan saya sebuah prompt dan saya akan mencoba menjawabnya.')
+    await update.message.reply_text(
+        "Halo! Saya adalah bot LLaMA. Kirimkan saya sebuah prompt dan saya akan mencoba menjawabnya."
+    )
+
 
 # Fungsi handler untuk perintah /help
 async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('Kirimkan saya teks apa pun dan saya akan memprosesnya dengan model LLaMA.')
+    await update.message.reply_text(
+        "Kirimkan saya teks apa pun dan saya akan memprosesnya dengan model LLaMA."
+    )
+
 
 # Fungsi handler untuk pesan teks
 async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -38,17 +70,16 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     chat_id = update.message.chat_id
 
     processing_message = await context.bot.send_message(
-        chat_id=chat_id,
-        text="Sedang memproses permintaan Anda... Tunggu sebentar."
+        chat_id=chat_id, text="Sedang memproses permintaan Anda... Tunggu sebentar."
     )
 
     try:
         api_data = {
             "prompt": user_prompt,
             "max_tokens": 512,
-            "temperature": 0.8
+            "temperature": 0.8,
         }
-        
+
         async with httpx.AsyncClient() as client:
             response = await client.post(LLAMA_API_URL, json=api_data, timeout=300)
 
@@ -56,58 +87,58 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
             result = response.json()
             if result.get("success"):
                 generated_text = result.get("text", "Tidak dapat menghasilkan teks.")
-                await context.bot.send_message(
-                    chat_id=chat_id,
-                    text=generated_text
-                )
+                await context.bot.send_message(chat_id=chat_id, text=generated_text)
             else:
-                error_message = result.get("error", "Terjadi kesalahan yang tidak diketahui.")
+                error_message = result.get(
+                    "error", "Terjadi kesalahan yang tidak diketahui."
+                )
                 await context.bot.send_message(
                     chat_id=chat_id,
-                    text=f"API LLaMA mengembalikan kesalahan: {error_message}"
+                    text=f"API LLaMA mengembalikan kesalahan: {error_message}",
                 )
         else:
             await context.bot.send_message(
                 chat_id=chat_id,
-                text=f"API LLaMA tidak dapat dijangkau. Kode status: {response.status_code}"
+                text=f"API LLaMA tidak dapat dijangkau. Kode status: {response.status_code}",
             )
 
     except httpx.HTTPError as http_err:
         logger.error(f"HTTP Error: {http_err}")
         await context.bot.send_message(
             chat_id=chat_id,
-            text="Terjadi kesalahan saat mencoba terhubung ke API LLaMA. Pastikan API Anda berjalan."
+            text="Terjadi kesalahan saat mencoba terhubung ke API LLaMA. Pastikan API Anda berjalan.",
         )
     except Exception as e:
         logger.error(f"An unexpected error occurred: {e}")
         await context.bot.send_message(
-            chat_id=chat_id,
-            text="Terjadi kesalahan internal. Silakan coba lagi nanti."
+            chat_id=chat_id, text="Terjadi kesalahan internal. Silakan coba lagi nanti."
         )
     finally:
         await context.bot.delete_message(
-            chat_id=chat_id,
-            message_id=processing_message.message_id
+            chat_id=chat_id, message_id=processing_message.message_id
         )
 
-@app.route(WEBHOOK_URL_PATH, methods=['POST'])
-async def telegram_webhook():
-    # Inisialisasi Application builder untuk setiap permintaan webhook
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    
-    # Tambahkan handler bot
-    application.add_handler(CommandHandler("start", start_command))
-    application.add_handler(CommandHandler("help", help_command))
-    application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
 
-    if request.method == "POST":
-        update = Update.de_json(request.get_json(force=True), application.bot)
-        await application.process_update(update)
-        return jsonify({"status": "success"})
+@app.route(WEBHOOK_URL_PATH, methods=["POST"])
+async def telegram_webhook():
+    global application
+    if application is None:
+        application = setup_telegram_bot()
+    if not application.post_init:
+        await application.post_init.run_once()
+
+    update = Update.de_json(request.get_json(force=True), application.bot)
+    await application.process_update(update)
+    return jsonify({"status": "success"})
+
 
 @app.route("/", methods=["GET"])
 async def index():
+    global application
+    if application is None:
+        application = setup_telegram_bot()
     return jsonify({"status": "Telegram bot is running"})
+
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
