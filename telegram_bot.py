@@ -31,9 +31,10 @@ WEBHOOK_URL_PATH = "/telegram"
 app = Flask(__name__)
 
 # Inisialisasi Application builder untuk python-telegram-bot
-application = (
-    Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-)
+application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+
+# Flag untuk menandai apakah aplikasi sudah diinisialisasi
+is_initialized = False
 
 # Fungsi handler untuk perintah /start
 async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -110,13 +111,14 @@ application.add_handler(
     MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message)
 )
 
-# Inisialisasi `application` saat aplikasi Flask dimulai
-@app.before_first_request
-async def initialize_application():
-    await application.initialize()
 
 @app.route(WEBHOOK_URL_PATH, methods=["POST"])
 async def telegram_webhook():
+    global is_initialized
+    if not is_initialized:
+        await application.initialize()
+        is_initialized = True
+
     update = Update.de_json(request.get_json(force=True), application.bot)
     await application.process_update(update)
     return jsonify({"status": "success"})
