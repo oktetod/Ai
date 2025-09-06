@@ -1,4 +1,4 @@
-Flask==2.3.3
+Flask[async]==2.3.3
 Werkzeug==2.3.7
 Flask-Limiter
 redis==5.0.1
