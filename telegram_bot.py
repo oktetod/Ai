@@ -13,8 +13,8 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 # URL API LLaMA.
-# Perhatikan: Kami menggunakan 'http://127.0.0.1:8080' karena keduanya berada di kontainer yang sama
-LLAMA_API_URL = "http://127.0.0.1:8080/generate"
+# Perhatikan: Kami menggunakan 'http://127.0.0.1:7860' karena keduanya berada di kontainer yang sama
+LLAMA_API_URL = "http://127.0.0.1:7860/generate"
 
 # Token Bot Telegram dari variabel lingkungan
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
